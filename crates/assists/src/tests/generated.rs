@@ -102,6 +102,23 @@ impl Trait<u32> for () {
 }
 
 #[test]
+fn doctest_add_missing_generics() {
+    check_doc_test(
+        "add_missing_generics",
+        r#####"
+struct MyStruct<T>(T);
+
+impl MyStruct<T<|>> {}
+"#####,
+        r#####"
+struct MyStruct<T>(T);
+
+impl<T> MyStruct<T> {}
+"#####,
+    )
+}
+
+#[test]
 fn doctest_add_turbo_fish() {
     check_doc_test(
         "add_turbo_fish",

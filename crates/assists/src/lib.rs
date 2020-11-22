@@ -122,6 +122,7 @@ mod handlers {
 
     mod add_explicit_type;
     mod add_missing_impl_members;
+    mod add_missing_generics;
     mod add_turbo_fish;
     mod apply_demorgan;
     mod auto_import;
@@ -172,6 +173,7 @@ mod handlers {
             // These are alphabetic for the foolish consistency
             add_explicit_type::add_explicit_type,
             add_turbo_fish::add_turbo_fish,
+            add_missing_generics::add_missing_generics,
             apply_demorgan::apply_demorgan,
             auto_import::auto_import,
             change_visibility::change_visibility,
