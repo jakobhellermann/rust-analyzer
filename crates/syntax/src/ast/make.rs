@@ -359,6 +359,11 @@ pub fn generic_param_list(
     ast_from_text(&format!("fn f<{}>() {{ }}", args))
 }
 
+pub fn generic_arg_list(args: impl IntoIterator<Item = String>) -> ast::GenericArgList {
+    let args = args.into_iter().join(", ");
+    ast_from_text(&format!("impl Foo<{}> {{}}", args))
+}
+
 pub fn visibility_pub_crate() -> ast::Visibility {
     ast_from_text("pub(crate) struct S")
 }
