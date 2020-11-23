@@ -85,13 +85,23 @@ pub(crate) fn add_missing_generics_inner(
         existing_struct_generics.into_iter().map(generic_arg_to_name),
     );
 
-    let impl_generics_new: ast::GenericParamList =
-        make::generic_param_list(impl_new.into_iter().map(|name| make::generic_param(name, None)));
+    let impl_generics_new: Option<ast::GenericParamList> = if !impl_new.is_empty() {
+        Some(make::generic_param_list(
+            impl_new.into_iter().map(|name| make::generic_param(name, None)),
+        ))
+    } else {
+        None
+    };
 
     let new_trait_generics: Option<ast::GenericArgList> =
         if !trait_new.is_empty() { Some(make::generic_arg_list(trait_new)) } else { None };
     let new_struct_generics: Option<ast::GenericArgList> =
         if !struct_new.is_empty() { Some(make::generic_arg_list(struct_new)) } else { None };
+
+    if impl_generics_new.is_none() && new_trait_generics.is_none() && new_struct_generics.is_none()
+    {
+        return None;
+    }
 
     // assist
     let impl_offset = impl_def.impl_token()?.text_range().end();
@@ -104,7 +114,9 @@ pub(crate) fn add_missing_generics_inner(
         let trait_offset = impl_def.trait_().map(|t| t.syntax().text_range().end());
         let struct_offset = impl_def.self_ty().map(|t| t.syntax().text_range().end());
 
-        replace_or_insert_at(builder, old_impl_generics, impl_generics_new, Some(impl_offset));
+        if let Some(impl_generics_new) = impl_generics_new {
+            replace_or_insert_at(builder, old_impl_generics, impl_generics_new, Some(impl_offset));
+        }
         if let Some(new_trait_generics) = new_trait_generics {
             replace_or_insert_at(builder, old_trait_generics, new_trait_generics, trait_offset);
         }
@@ -148,26 +160,19 @@ fn resolve_self_ty(sema: &Semantics<RootDatabase>, impl_def: &ast::Impl) -> Opti
 fn type_param_to_name(type_param: &hir::TypeParam, db: &dyn HirDatabase) -> String {
     type_param.name(db).to_string()
 }
-fn generic_param_to_name(generic_param: ast::GenericParam) -> String {
+fn generic_param_to_name(generic_param: ast::GenericParam) -> Option<String> {
     match generic_param {
-        ast::GenericParam::TypeParam(ty) => ty.name().expect("todo").to_string(),
-        _ => todo!(),
+        ast::GenericParam::TypeParam(ty) => Some(ty.name()?.to_string()),
+        _ => None,
     }
 }
-fn generic_arg_to_name(generic_param: ast::GenericArg) -> String {
+fn generic_arg_to_name(generic_param: ast::GenericArg) -> Option<String> {
     match generic_param {
-        ast::GenericArg::TypeArg(ty) => match ty.ty().expect("todo") {
-            ast::Type::PathType(path) => path
-                .path()
-                .expect("todo")
-                .segment()
-                .expect("todo")
-                .name_ref()
-                .expect("todo")
-                .to_string(),
-            _ => todo!(),
+        ast::GenericArg::TypeArg(ty) => match ty.ty()? {
+            ast::Type::PathType(path) => Some(path.path()?.segment()?.name_ref()?.to_string()),
+            _ => None,
         },
-        _ => todo!(),
+        _ => None,
     }
 }
 
@@ -197,12 +202,12 @@ where
 fn determine_missing_generics(
     struct_params: impl Iterator<Item = String>,
     trait_params: impl Iterator<Item = String>,
-    existing_impl: impl Iterator<Item = String>,
-    existing_trait: impl Iterator<Item = String>,
-    existing_struct: impl Iterator<Item = String>,
+    existing_impl: impl Iterator<Item = Option<String>>,
+    existing_trait: impl Iterator<Item = Option<String>>,
+    existing_struct: impl Iterator<Item = Option<String>>,
 ) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut new_impl_generics: Vec<(String, bool)> =
-        existing_impl.into_iter().map(|s| (s.to_string(), false)).collect();
+        existing_impl.into_iter().filter_map(|x| x).map(|s| (s.to_string(), false)).collect();
     let mut new_trait_generics = Vec::new();
     let mut new_struct_generics = Vec::new();
 
@@ -291,6 +296,21 @@ mod tests {
             r#"
             struct X(u32);
             impl X <|>{}
+            "#,
+        );
+    }
+
+    #[test]
+    fn test_inapplicable_2() {
+        check_assist(
+            add_missing_generics,
+            r#"
+            struct X<T>(T);
+            impl X<()> <|>{}
+            "#,
+            r#"
+            struct X<T>(T);
+            impl X<()> <|>{}
             "#,
         );
     }
