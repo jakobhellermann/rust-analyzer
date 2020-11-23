@@ -30,6 +30,9 @@ pub(crate) fn add_missing_generics(acc: &mut Assists, ctx: &AssistContext) -> Op
         "Add missing generics to impl block",
     )
 }
+
+type Vec<T> = smallvec::SmallVec<[T; 4]>;
+
 pub(crate) fn add_missing_generics_inner(
     acc: &mut Assists,
     ctx: &AssistContext,
@@ -75,11 +78,11 @@ pub(crate) fn add_missing_generics_inner(
     }
 
     let (impl_new, trait_new, struct_new) = determine_missing_generics(
-        struct_params.into_iter().map(|p| type_param_to_name(&p, ctx.db())).collect(),
-        trait_params.into_iter().map(|p| type_param_to_name(&p, ctx.db())).collect(),
-        existing_impl_generics.into_iter().map(generic_param_to_name).collect(),
-        existing_trait_generics.into_iter().map(generic_arg_to_name).collect(),
-        existing_struct_generics.into_iter().map(generic_arg_to_name).collect(),
+        struct_params.into_iter().map(|p| type_param_to_name(&p, ctx.db())),
+        trait_params.into_iter().map(|p| type_param_to_name(&p, ctx.db())),
+        existing_impl_generics.into_iter().map(generic_param_to_name),
+        existing_trait_generics.into_iter().map(generic_arg_to_name),
+        existing_struct_generics.into_iter().map(generic_arg_to_name),
     );
 
     let impl_generics_new: ast::GenericParamList =
@@ -192,11 +195,11 @@ where
 /// -->
 /// impl<A, U, T, B> Foo<A, U> for X<T, B> {} // return (new_impl, new_trait, new_struct)
 fn determine_missing_generics(
-    struct_params: Vec<String>,
-    trait_params: Vec<String>,
-    existing_impl: Vec<String>,
-    existing_trait: Vec<String>,
-    existing_struct: Vec<String>,
+    struct_params: impl Iterator<Item = String>,
+    trait_params: impl Iterator<Item = String>,
+    existing_impl: impl Iterator<Item = String>,
+    existing_trait: impl Iterator<Item = String>,
+    existing_struct: impl Iterator<Item = String>,
 ) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut new_impl_generics: Vec<(String, bool)> =
         existing_impl.into_iter().map(|s| (s.to_string(), false)).collect();
@@ -213,8 +216,8 @@ fn determine_missing_generics(
             .unwrap_or("_".to_string())
     };
 
-    let mut add_to_new_impl = |item: &str| {
-        let already_in = new_impl_generics.iter().find(|(i, _)| i == item);
+    let mut add_to_new_impl = |item: String| {
+        let already_in = new_impl_generics.iter().find(|(i, _)| i == &item);
         match already_in {
             // already in and used, generate a unique one
             Some((_, true)) => {
@@ -223,20 +226,20 @@ fn determine_missing_generics(
                 unique
             }
             // already in and unused
-            Some((_, false)) => item.to_string(),
+            Some((_, false)) => item,
             // not in there, therefore we add it
             None => {
-                new_impl_generics.push((item.to_string(), true));
-                item.to_string()
+                new_impl_generics.push((item.clone(), true));
+                item
             }
         }
     };
 
-    for parameter in first_then_remaining_second(existing_trait.iter(), trait_params.iter()) {
+    for parameter in first_then_remaining_second(existing_trait, trait_params) {
         let name = add_to_new_impl(parameter);
         new_trait_generics.push(name);
     }
-    for parameter in first_then_remaining_second(existing_struct.iter(), struct_params.iter()) {
+    for parameter in first_then_remaining_second(existing_struct, struct_params) {
         let name = add_to_new_impl(parameter);
         new_struct_generics.push(name);
     }
